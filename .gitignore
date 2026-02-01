@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+# Logs
+*.log
+install_log.txt
+install_log2.txt
+test_results.txt
+
+# Local Config
+mcp_config.json
+
+# IDE settings
+.vscode/
+.idea/
+
+# Nested git repo (accidentally created)
+LLM-PDF-Parser/

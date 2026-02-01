@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pdf-parser": {
+      "command": "C:\\path\\to\\LLM-PDF-Parser\\start_server.bat",
+      "args": [],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
