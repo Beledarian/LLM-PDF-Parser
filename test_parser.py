@@ -211,6 +211,49 @@ class TestReadPdfUmlauts(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Integration test: real German PDF on disk
+# ---------------------------------------------------------------------------
+
+class TestRealGermanPdf(unittest.TestCase):
+    """End-to-end test using test_german.pdf (committed test fixture)."""
+
+    FIXTURE = "test_german.pdf"
+
+    def setUp(self):
+        import os
+        if not os.path.exists(self.FIXTURE):
+            self.skipTest(f"Fixture '{self.FIXTURE}' not found — skipping integration test.")
+
+    def test_all_german_umlauts_extracted(self):
+        """ä ö ü Ä Ö Ü ß must all appear in the extracted text."""
+        from server import read_pdf
+        result = read_pdf(self.FIXTURE, ocr=False)
+        for char in ["\xe4", "\xf6", "\xfc", "\xc4", "\xd6", "\xdc", "\xdf"]:
+            self.assertIn(char, result, f"Missing character U+{ord(char):04X} in output")
+
+    def test_german_words_extracted_correctly(self):
+        """Full German words containing umlauts must be intact."""
+        from server import read_pdf
+        result = read_pdf(self.FIXTURE, ocr=False)
+        for word in ["M\xfcller", "G\xfcnther", "B\xe4rbel", "Stra\xdfe", "\xc4pfel"]:
+            self.assertIn(word, result, f"Missing word '{word}' in output")
+
+    def test_special_symbols_extracted(self):
+        """Euro sign, copyright, and trademark must appear in the output."""
+        from server import read_pdf
+        result = read_pdf(self.FIXTURE, ocr=False)
+        for symbol in ["\u20ac", "\xa9", "\u2122"]:
+            self.assertIn(symbol, result, f"Missing symbol U+{ord(symbol):04X} in output")
+
+    def test_accented_latin_extracted(self):
+        """French and Spanish accented characters must survive extraction."""
+        from server import read_pdf
+        result = read_pdf(self.FIXTURE, ocr=False)
+        for token in ["Caf\xe9", "na\xefve", "r\xe9sum\xe9", "\xd1o\xf1o"]:
+            self.assertIn(token, result, f"Missing token '{token}' in output")
+
+
+# ---------------------------------------------------------------------------
 # read_docx
 # ---------------------------------------------------------------------------
 
