@@ -4,8 +4,8 @@ Tests for umlaut and special-character support in the PDF/DOCX parser.
 
 Covers:
   - _normalize_text: NFC Unicode normalization
-  - read_pdf:  umlaut preservation, combining-char normalization, ocr_language passthrough
-  - read_docx: umlaut preservation, ocr_language passthrough
+  - read_pdf:  umlaut preservation, combining-char normalization, ocr_languages passthrough
+  - read_docx: umlaut preservation, ocr_languages passthrough
 """
 
 import sys
@@ -25,28 +25,28 @@ from server import _normalize_text
 class TestNormalizeText(unittest.TestCase):
 
     def test_nfc_composes_combining_a_umlaut(self):
-        """NFD 'a' + combining diaeresis (U+0308) must compose to NFC U+00E4."""
-        nfd = "\u0061\u0308"    # a + combining diaeresis
-        self.assertEqual(_normalize_text(nfd), "\xe4")  # ae-umlaut NFC
+        """NFD 'a' + combining diaeresis (U+0308) must compose to NFC U+00E4 (ae-umlaut)."""
+        nfd = "\u0061\u0308"
+        self.assertEqual(_normalize_text(nfd), "\xe4")
 
     def test_nfc_composes_combining_u_umlaut(self):
-        """NFD 'u' + combining diaeresis must compose to NFC U+00FC."""
-        nfd = "\u0075\u0308"    # u + combining diaeresis
-        self.assertEqual(_normalize_text(nfd), "\xfc")  # u-umlaut NFC
+        """NFD 'u' + combining diaeresis must compose to NFC U+00FC (u-umlaut)."""
+        nfd = "\u0075\u0308"
+        self.assertEqual(_normalize_text(nfd), "\xfc")
 
     def test_nfc_composes_combining_o_umlaut(self):
-        """NFD 'o' + combining diaeresis must compose to NFC U+00F6."""
-        nfd = "\u006f\u0308"    # o + combining diaeresis
-        self.assertEqual(_normalize_text(nfd), "\xf6")  # o-umlaut NFC
+        """NFD 'o' + combining diaeresis must compose to NFC U+00F6 (o-umlaut)."""
+        nfd = "\u006f\u0308"
+        self.assertEqual(_normalize_text(nfd), "\xf6")
 
     def test_nfc_composes_combining_capital_A_umlaut(self):
-        """NFD 'A' + combining diaeresis must compose to NFC U+00C4."""
-        nfd = "\u0041\u0308"    # A + combining diaeresis
-        self.assertEqual(_normalize_text(nfd), "\xc4")  # Ae-umlaut NFC
+        """NFD 'A' + combining diaeresis must compose to NFC U+00C4 (Ae-umlaut)."""
+        nfd = "\u0041\u0308"
+        self.assertEqual(_normalize_text(nfd), "\xc4")
 
     def test_nfc_preserves_already_composed_umlauts(self):
         """Text already in NFC (composed umlauts) is returned unchanged."""
-        text = "Stra\xdfe \xf6ffnet \xdc\xe4u\xdfere \xdcbung"  # Strae... oe... Ueae...ue... Uebung
+        text = "Stra\xdfe \xf6ffnet \xdc\xe4u\xdfere \xdcbung"
         self.assertEqual(_normalize_text(text), text)
 
     def test_nfc_preserves_eszett(self):
@@ -91,7 +91,6 @@ class TestReadPdfUmlauts(unittest.TestCase):
         return mock_reader
 
     def test_umlauts_preserved_in_output(self):
-        """\xc4rger \xfcber \xf6ffentliche \xdcberg\xe4nge all survive extraction."""
         from server import read_pdf
         reader = self._make_mock_reader(
             "\xc4rger \xfcber \xf6ffentliche \xdcberg\xe4nge"
@@ -105,7 +104,6 @@ class TestReadPdfUmlauts(unittest.TestCase):
         self.assertIn("\xdcberg\xe4nge", result)
 
     def test_eszett_preserved(self):
-        """German \xdf (sharp-s) passes through extraction unchanged."""
         from server import read_pdf
         reader = self._make_mock_reader("Stra\xdfe und Fu\xdfweg")
         with patch("server.PdfReader", return_value=reader), \
@@ -116,7 +114,6 @@ class TestReadPdfUmlauts(unittest.TestCase):
         self.assertIn("Fu\xdfweg", result)
 
     def test_accented_and_symbol_characters_preserved(self):
-        """Accented Latin and common symbols survive the extraction pipeline."""
         from server import read_pdf
         reader = self._make_mock_reader(
             "Caf\xe9 na\xefve r\xe9sum\xe9 \u20ac100 \xa9"
@@ -131,16 +128,16 @@ class TestReadPdfUmlauts(unittest.TestCase):
     def test_combining_characters_normalized_to_nfc(self):
         """NFD text returned by pypdf is normalized to NFC in the result."""
         from server import read_pdf
-        nfd_u_umlaut = "\u0075\u0308"   # u + combining diaeresis
+        nfd_u_umlaut = "\u0075\u0308"
         reader = self._make_mock_reader(nfd_u_umlaut)
         with patch("server.PdfReader", return_value=reader), \
              patch("os.path.exists", return_value=True):
             result = read_pdf("/fake/path.pdf", ocr=False)
 
-        self.assertIn("\xfc", result)   # NFC u-umlaut
+        self.assertIn("\xfc", result)
 
-    def test_ocr_language_passed_to_tesseract(self):
-        """ocr_language is forwarded to pytesseract.image_to_string."""
+    def test_ocr_languages_list_joined_and_passed_to_tesseract(self):
+        """ocr_languages list is joined with '+' and forwarded to pytesseract."""
         from server import read_pdf
 
         mock_img = MagicMock()
@@ -159,16 +156,58 @@ class TestReadPdfUmlauts(unittest.TestCase):
              patch("os.path.exists", return_value=True), \
              patch("server.Image.open", return_value=mock_img), \
              patch("server.pytesseract.image_to_string", return_value="\xc4rger") as mock_tess:
-            result = read_pdf("/fake/path.pdf", ocr=True, ocr_language="deu+eng")
+            result = read_pdf("/fake/path.pdf", ocr=True, ocr_languages=["deu", "eng"])
 
         mock_tess.assert_called_once_with(mock_img, lang="deu+eng")
         self.assertIn("\xc4rger", result)
 
-    def test_default_ocr_language_is_deu_plus_eng(self):
-        """Default value of ocr_language parameter must be 'deu+eng'."""
+    def test_single_language_no_plus(self):
+        """A single-language list produces a plain language code (no '+')."""
         from server import read_pdf
-        sig = inspect.signature(read_pdf)
-        self.assertEqual(sig.parameters["ocr_language"].default, "deu+eng")
+
+        mock_img = MagicMock()
+        mock_image_obj = MagicMock()
+        mock_image_obj.data = b"\x89PNG\r\n\x1a\n"
+
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = ""
+        mock_page.images = [mock_image_obj]
+
+        mock_reader = MagicMock()
+        mock_reader.is_encrypted = False
+        mock_reader.pages = [mock_page]
+
+        with patch("server.PdfReader", return_value=mock_reader), \
+             patch("os.path.exists", return_value=True), \
+             patch("server.Image.open", return_value=mock_img), \
+             patch("server.pytesseract.image_to_string", return_value="text") as mock_tess:
+            read_pdf("/fake/path.pdf", ocr=True, ocr_languages=["fra"])
+
+        mock_tess.assert_called_once_with(mock_img, lang="fra")
+
+    def test_default_ocr_languages_yields_deu_plus_eng(self):
+        """When ocr_languages is omitted, Tesseract receives 'deu+eng'."""
+        from server import read_pdf
+
+        mock_img = MagicMock()
+        mock_image_obj = MagicMock()
+        mock_image_obj.data = b"\x89PNG\r\n\x1a\n"
+
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = ""
+        mock_page.images = [mock_image_obj]
+
+        mock_reader = MagicMock()
+        mock_reader.is_encrypted = False
+        mock_reader.pages = [mock_page]
+
+        with patch("server.PdfReader", return_value=mock_reader), \
+             patch("os.path.exists", return_value=True), \
+             patch("server.Image.open", return_value=mock_img), \
+             patch("server.pytesseract.image_to_string", return_value="text") as mock_tess:
+            read_pdf("/fake/path.pdf", ocr=True)  # no ocr_languages
+
+        mock_tess.assert_called_once_with(mock_img, lang="deu+eng")
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +228,6 @@ class TestReadDocxUmlauts(unittest.TestCase):
         return mock_doc
 
     def test_umlauts_preserved_in_output(self):
-        """M\xfcller, G\xfcnther und B\xe4rbel all appear in the result."""
         from server import read_docx
         doc = self._make_mock_doc("M\xfcller, G\xfcnther und B\xe4rbel")
         with patch("server.Document", return_value=doc), \
@@ -201,7 +239,6 @@ class TestReadDocxUmlauts(unittest.TestCase):
         self.assertIn("B\xe4rbel", result)
 
     def test_special_characters_preserved(self):
-        """Euro sign and accented characters survive DOCX extraction."""
         from server import read_docx
         doc = self._make_mock_doc("\u20ac1.000 \xb7 r\xe9sum\xe9 \xb7 na\xefve")
         with patch("server.Document", return_value=doc), \
@@ -212,8 +249,8 @@ class TestReadDocxUmlauts(unittest.TestCase):
         self.assertIn("r\xe9sum\xe9", result)
         self.assertIn("na\xefve", result)
 
-    def test_ocr_language_passed_to_tesseract(self):
-        """ocr_language is forwarded to pytesseract in the DOCX OCR path."""
+    def test_ocr_languages_list_joined_and_passed_to_tesseract(self):
+        """ocr_languages list is joined with '+' and forwarded to pytesseract."""
         from server import read_docx
 
         mock_img = MagicMock()
@@ -232,15 +269,33 @@ class TestReadDocxUmlauts(unittest.TestCase):
              patch("os.path.exists", return_value=True), \
              patch("server.Image.open", return_value=mock_img), \
              patch("server.pytesseract.image_to_string", return_value="\xc4rger") as mock_tess:
-            read_docx("/fake/path.docx", ocr=True, ocr_language="deu")
+            read_docx("/fake/path.docx", ocr=True, ocr_languages=["deu"])
 
         mock_tess.assert_called_once_with(mock_img, lang="deu")
 
-    def test_default_ocr_language_is_deu_plus_eng(self):
-        """Default value of ocr_language parameter must be 'deu+eng'."""
+    def test_default_ocr_languages_yields_deu_plus_eng(self):
+        """When ocr_languages is omitted, Tesseract receives 'deu+eng'."""
         from server import read_docx
-        sig = inspect.signature(read_docx)
-        self.assertEqual(sig.parameters["ocr_language"].default, "deu+eng")
+
+        mock_img = MagicMock()
+        mock_rel = MagicMock()
+        mock_rel.reltype = (
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+        )
+        mock_rel.target_part.blob = b"\x89PNG\r\n\x1a\n"
+
+        mock_doc = MagicMock()
+        mock_doc.paragraphs = []
+        mock_doc.tables = []
+        mock_doc.part.rels = {"rId1": mock_rel}
+
+        with patch("server.Document", return_value=mock_doc), \
+             patch("os.path.exists", return_value=True), \
+             patch("server.Image.open", return_value=mock_img), \
+             patch("server.pytesseract.image_to_string", return_value="text") as mock_tess:
+            read_docx("/fake/path.docx", ocr=True)  # no ocr_languages
+
+        mock_tess.assert_called_once_with(mock_img, lang="deu+eng")
 
 
 if __name__ == "__main__":

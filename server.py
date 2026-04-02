@@ -31,26 +31,31 @@ if os.path.exists(TESSERACT_PATH):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
 @mcp.tool()
-def read_pdf(file_path: str, pages: str = None, password: str = None, ocr: bool = True, ocr_language: str = "deu+eng") -> str:
+def read_pdf(file_path: str, pages: str = None, password: str = None, ocr: bool = True, ocr_languages: list[str] | None = None) -> str:
     """
     Reads a PDF file (local path or URL) and converts it to Markdown-ish text.
     
     Args:
         file_path: The absolute path to the local PDF file OR a URL (http/https).
+                   Filenames containing umlauts or other Unicode characters are supported.
         pages: (Optional) A comma-separated list of page numbers to read (0-indexed). 
                Example: "0,1,5" or "0-5". If omitted, reads the entire file.
         password: (Optional) Password for decrypting the PDF if it is protected.
         ocr: (Optional) If True, also extracts text from images using Tesseract OCR.
              Useful for scanned documents. Default is True.
-        ocr_language: (Optional) Tesseract language string for OCR, e.g. "deu+eng" for
-                      German + English (supports umlauts and other special characters).
-                      Requires the corresponding Tesseract language packs to be installed.
-                      Default is "deu+eng".
+        ocr_languages: (Optional) List of Tesseract language codes used for OCR, e.g.
+                       ["deu", "eng"] for German + English (supports umlauts and other
+                       special characters). Codes are joined with '+' internally.
+                       Requires the corresponding Tesseract language packs to be installed.
+                       Defaults to ["deu", "eng"].
     
     Note: This implementation uses pypdf (pure Python) instead of pymupdf due to 
           compilation issues on Windows ARM64. The output is plain text extracted 
           from the PDF, not as sophisticated as pymupdf4llm's Markdown output.
     """
+    if ocr_languages is None:
+        ocr_languages = ["deu", "eng"]
+    lang_str = "+".join(ocr_languages)
     temp_pdf_path = None
     reader = None
     
@@ -134,7 +139,7 @@ def read_pdf(file_path: str, pages: str = None, password: str = None, ocr: bool 
                             img = Image.open(io.BytesIO(img_data))
                             
                             # Run OCR
-                            ocr_text = pytesseract.image_to_string(img, lang=ocr_language)
+                            ocr_text = pytesseract.image_to_string(img, lang=lang_str)
                             if ocr_text and ocr_text.strip():
                                 page_content.append(f"\n[OCR from image {img_idx + 1}]\n{_normalize_text(ocr_text).strip()}")
                         except Exception as img_e:
@@ -161,21 +166,26 @@ def read_pdf(file_path: str, pages: str = None, password: str = None, ocr: bool 
                 pass
 
 @mcp.tool()
-def read_docx(file_path: str, ocr: bool = True, ocr_language: str = "deu+eng") -> str:
+def read_docx(file_path: str, ocr: bool = True, ocr_languages: list[str] | None = None) -> str:
     """
     Reads a DOCX file (local path or URL) and converts it to Markdown-ish text.
     
     Args:
         file_path: The absolute path to the local DOCX file OR a URL (http/https).
+                   Filenames containing umlauts or other Unicode characters are supported.
         ocr: (Optional) If True, also extracts text from embedded images using Tesseract OCR.
              Default is True.
-        ocr_language: (Optional) Tesseract language string for OCR, e.g. "deu+eng" for
-                      German + English (supports umlauts and other special characters).
-                      Default is "deu+eng".
+        ocr_languages: (Optional) List of Tesseract language codes used for OCR, e.g.
+                       ["deu", "eng"] for German + English (supports umlauts and other
+                       special characters). Codes are joined with '+' internally.
+                       Defaults to ["deu", "eng"].
     
     Returns:
         Markdown-formatted text extracted from the DOCX file.
     """
+    if ocr_languages is None:
+        ocr_languages = ["deu", "eng"]
+    lang_str = "+".join(ocr_languages)
     temp_docx_path = None
     
     try:
@@ -259,7 +269,7 @@ def read_docx(file_path: str, ocr: bool = True, ocr_language: str = "deu+eng") -
                             img_data = image_part.blob
                             img = Image.open(io.BytesIO(img_data))
                             
-                            ocr_text = pytesseract.image_to_string(img, lang=ocr_language)
+                            ocr_text = pytesseract.image_to_string(img, lang=lang_str)
                             if ocr_text and ocr_text.strip():
                                 extracted_content.append(f"\n[OCR from embedded image]\n{_normalize_text(ocr_text).strip()}")
                         except Exception as img_e:
